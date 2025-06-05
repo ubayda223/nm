@@ -1,589 +1,247 @@
-import React, { useState, useEffect } from 'react';
-
-// Import Firebase modules
-import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-} from 'firebase/auth';
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  deleteDoc,
-  doc,
-  updateDoc,
-} from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-
-// Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyA2EpLzJrcsTt7kK8sF_yzs7XJtl0R7Ybg",
-  authDomain: "mymessenger-d6514.firebaseapp.com",
-  projectId: "mymessenger-d6514",
-  storageBucket: "mymessenger-d6514.firebasestorage.app",
-  messagingSenderId: "677038576951",
-  appId: "1:677038576951:web:4e23891c440def4260b6b2",
-  measurementId: "G-YZ986P5D8K"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
-
-export default function App() {
-  const [darkMode, setDarkMode] = useState(false);
-  const [activeTab, setActiveTab] = useState('shop');
-  const [cart, setCart] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [user, setUser] = useState(null);
-  const [products, setProducts] = useState([]);
-  const [newProduct, setNewProduct] = useState({
-    name: '',
-    price: 0,
-    category: 'clothing',
-    image: '',
-  });
-  const [imagePreview, setImagePreview] = useState(null);
-
-  // Toggle dark/light mode
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [darkMode]);
-
-  // Firebase Auth listener
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Fetch products from Firestore
-  useEffect(() => {
-    const fetchProducts = async () => {
-      const q = query(collection(db, 'products'));
-      const querySnapshot = await getDocs(q);
-      const productsData = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setProducts(productsData);
-    };
-
-    fetchProducts();
-  }, []);
-
-  // Filter products based on search query
-  const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Add to cart handler
-  const addToCart = (product) => {
-    const updatedCart = [...cart, product];
-    setCart(updatedCart);
-  };
-
-  // Remove from cart handler
-  const removeFromCart = (productId) => {
-    const updatedCart = cart.filter((item) => item.id !== productId);
-    setCart(updatedCart);
-  };
-
-  // Calculate total price
-  const totalPrice = cart.reduce((sum, item) => sum + item.price, 0);
-
-  // Handle registration
-  const handleRegister = async (email, password) => {
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      alert('Registration successful!');
-    } catch (error) {
-      alert('Error during registration: ' + error.message);
-    }
-  };
-
-  // Handle login
-  const handleLogin = async (email, password) => {
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      alert('Login successful!');
-    } catch (error) {
-      alert('Error during login: ' + error.message);
-    }
-  };
-
-  // Handle logout
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      alert('Logged out successfully!');
-    } catch (error) {
-      alert('Error during logout: ' + error.message);
-    }
-  };
-
-  // Handle image upload
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-        setNewProduct({ ...newProduct, image: reader.result });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // Add new product to Firestore
-  const addProduct = async () => {
-    if (!newProduct.name || !newProduct.price || !newProduct.image) {
-      alert("Please fill in all fields");
-      return;
-    }
-
-    try {
-      // Upload image to Firebase Storage
-      const imageRef = ref(storage, `product-images/${Date.now()}-${newProduct.image.name}`);
-      await uploadBytes(imageRef, newProduct.image);
-      const imageUrl = await getDownloadURL(imageRef);
-
-      // Save product data to Firestore
-      const productData = { ...newProduct, image: imageUrl };
-      await addDoc(collection(db, 'products'), productData);
-
-      // Update local state
-      setProducts([...products, productData]);
-      setNewProduct({ name: '', price: 0, category: 'clothing', image: '' });
-      setImagePreview(null);
-      alert('Product added successfully!');
-    } catch (error) {
-      alert('Error adding product: ' + error.message);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-md p-4 sticky top-0 z-10">
-        <div className="container mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">TurkiyaMode</h1>
-          <div className="flex items-center space-x-4">
-            <button 
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
-            >
-              {darkMode ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-              )}
-            </button>
-            {user ? (
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                Logout
-              </button>
-            ) : (
-              <button
-                onClick={() => setActiveTab('login')}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                Login
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Navigation Tabs */}
-      <nav className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="container mx-auto flex justify-around">
-          <button
-            onClick={() => setActiveTab('shop')}
-            className={`py-3 px-4 ${activeTab === 'shop' ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}
-          >
-            Shop
-          </button>
-          <button
-            onClick={() => setActiveTab('cart')}
-            className={`py-3 px-4 relative ${activeTab === 'cart' ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}
-          >
-            Cart
-            {cart.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {cart.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('profile')}
-            className={`py-3 px-4 ${activeTab === 'profile' ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}
-          >
-            Profile
-          </button>
-          {user && (
-            <button
-              onClick={() => setActiveTab('add-product')}
-              className={`py-3 px-4 ${activeTab === 'add-product' ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}
-            >
-              Add Product
-            </button>
-          )}
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="container mx-auto p-4">
-        {/* Search Bar */}
-        <div className="mb-6">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full p-3 pl-10 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <svg
-              className="absolute left-3 top-3 h-5 w-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              ></path>
-            </svg>
-          </div>
-        </div>
-
-        {/* Shop Tab */}
-        {activeTab === 'shop' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProducts.map((product) => (
-              <div
-                key={product.id}
-                className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-lg transform transition duration-300 hover:scale-105"
-              >
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="w-full h-64 object-cover"
-                />
-                <div className="p-4">
-                  <h2 className="text-xl font-semibold mb-2 text-gray-800 dark:text-white">{product.name}</h2>
-                  <p className="text-indigo-600 dark:text-indigo-400 font-bold">${product.price.toFixed(2)}</p>
-                  <button
-                    onClick={() => addToCart(product)}
-                    className="mt-4 w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    Add to Cart
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Cart Tab */}
-        {activeTab === 'cart' && (
-          <div className="space-y-4">
-            {cart.length === 0 ? (
-              <p className="text-center text-gray-600 dark:text-gray-400 py-8">Your cart is empty</p>
-            ) : (
-              <>
-                {cart.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center bg-white dark:bg-gray-800 p-4 rounded-lg shadow"
-                  >
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="w-20 h-20 object-cover rounded"
-                    />
-                    <div className="ml-4 flex-grow">
-                      <h3 className="font-medium text-gray-800 dark:text-white">{item.name}</h3>
-                      <p className="text-indigo-600 dark:text-indigo-400">${item.price.toFixed(2)}</p>
-                    </div>
-                    <button
-                      onClick={() => removeFromCart(item.id)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-6 w-6"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mt-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Total:</h3>
-                    <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
-                      ${totalPrice.toFixed(2)}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => alert('Order placed via WhatsApp!')}
-                    className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center"
-                  >
-                    <svg
-                      className="w-6 h-6 mr-2"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v2h-2V7zm0 4h2v6h-2v-6z"></path>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TurkiyaMode - Ваш стильный магазин</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <meta name="theme-color" content="#3B82F6">
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          // Для GitHub Pages путь должен быть относительным:
+          navigator.serviceWorker.register('sw.js');
+        });
+      }
+    </script>
+</head>
+<body class="bg-gray-100 transition-colors duration-200" data-theme="light">
+    <!-- Header -->
+    <header class="bg-white shadow-md">
+        <nav class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center">
+                <h1 class="text-2xl font-bold text-blue-600">TurkiyaMode</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="themeToggle" class="p-2 rounded-full hover:bg-gray-200">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path class="sun" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
                     </svg>
-                    Order via WhatsApp
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Profile Tab */}
-        {activeTab === 'profile' && (
-          <div className="max-w-md mx-auto">
-            {user ? (
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-                <div className="flex flex-col items-center">
-                  <div className="w-24 h-24 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold mb-4">
-                    {user.email.charAt(0).toUpperCase()}
-                  </div>
-                  <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{user.email}</h2>
-                  <button
-                    onClick={handleLogout}
-                    className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                  >
-                    Logout
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-                <h2 className="text-2xl font-bold text-center mb-6 text-gray-800 dark:text-white">Login</h2>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleLogin(e.target.email.value, e.target.password.value);
-                  }}
-                  className="space-y-4"
-                >
-                  <div>
-                    <label className="block text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                    <input
-                      type="email"
-                      name="email"
-                      className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Enter your email"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 dark:text-gray-300 mb-1">Password</label>
-                    <input
-                      type="password"
-                      name="password"
-                      className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Enter your password"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    Login
-                  </button>
-                  <p className="text-center text-gray-600 dark:text-gray-400">
-                    Don't have an account?{" "}
-                    <button
-                      onClick={() => setActiveTab('register')}
-                      className="text-indigo-600 dark:text-indigo-400 hover:underline"
-                    >
-                      Register
-                    </button>
-                  </p>
-                </form>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Add Product Tab */}
-        {activeTab === 'add-product' && (
-          <div className="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800 dark:text-white">Add New Product</h2>
-            <form className="space-y-4">
-              <div>
-                <label className="block text-gray-700 dark:text-gray-300 mb-1">Product Name</label>
-                <input
-                  type="text"
-                  value={newProduct.name}
-                  onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                  className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Enter product name"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 dark:text-gray-300 mb-1">Price</label>
-                <input
-                  type="number"
-                  value={newProduct.price}
-                  onChange={(e) => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) })}
-                  className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Enter product price"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 dark:text-gray-300 mb-1">Category</label>
-                <select
-                  value={newProduct.category}
-                  onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-                  className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="clothing">Clothing</option>
-                  <option value="electronics">Electronics</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-gray-700 dark:text-gray-300 mb-1">Image</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    setNewProduct({ ...newProduct, image: e.target.files[0] });
-                    handleImageUpload(e);
-                  }}
-                  className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                {imagePreview && (
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="mt-4 w-full h-48 object-cover rounded"
-                  />
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={addProduct}
-                className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                Add Product
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* Register Tab */}
-        {activeTab === 'register' && (
-          <div className="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800 dark:text-white">Register</h2>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleRegister(e.target.email.value, e.target.password.value);
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="block text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Enter your email"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 dark:text-gray-300 mb-1">Password</label>
-                <input
-                  type="password"
-                  name="password"
-                  className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Enter your password"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                Register
-              </button>
-              <p className="text-center text-gray-600 dark:text-gray-400">
-                Already have an account?{" "}
-                <button
-                  onClick={() => setActiveTab('login')}
-                  className="text-indigo-600 dark:text-indigo-400 hover:underline"
-                >
-                  Login
                 </button>
-              </p>
-            </form>
-          </div>
-        )}
-      </main>
+                <div class="relative">
+                    <input type="text" placeholder="Поиск..." class="w-64 px-4 py-2 rounded-full border focus:outline-none focus:border-blue-500">
+                </div>                <a href="#/" class="hover:text-blue-600 home-link">Главная</a>
+                <a href="#/profile" class="hover:text-blue-600">Профиль</a>
+                <a href="#/cart" class="hover:text-blue-600">Корзина</a>
+                <a href="#/admin" class="hover:text-green-600">Админ</a>
+                <a href="#/settings" class="hover:text-blue-600 settings-link">Настройки</a>
+            </div>
+        </nav>
+    </header>
 
-      {/* Footer */}
-      <footer className="bg-white dark:bg-gray-800 mt-12 py-6">
-        <div className="container mx-auto px-4 text-center text-gray-600 dark:text-gray-400">
-          <p>© 2025 TurkiyaMode. All rights reserved.</p>
-          <div className="mt-4 flex justify-center space-x-4">
-            <a href="#" className="hover:text-indigo-600 dark:hover:text-indigo-400">
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M22 12c0-5.523-4.477-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-1 13h-2v-7h-4v7H9v-11h4V9.5C13 8.12 14.12 7 15.5 7S18 8.12 18 9.5V15h3v-5.5c0-2.485-2.015-4.5-4.5-4.5S11 7.015 11 9.5V15h-2v-5.5C9 7.015 10.015 5 12 5s3 2.015 3 4.5V15h4v-11z" />
-              </svg>
-            </a>
-            <a href="#" className="hover:text-indigo-600 dark:hover:text-indigo-400">
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.205.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.74 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.74 0 12c0 3.26.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.74 24 12 24c3.26 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.26-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.26 0 12 0z" />
-                <path d="M12 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8z" />
-                <circle cx="18.406" cy="5.594" r="1.44" />
-              </svg>
-            </a>
-            <a href="#" className="hover:text-indigo-600 dark:hover:text-indigo-400">
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z" />
-              </svg>
-            </a>
-          </div>
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- Categories -->
+        <section class="mb-8">
+            <h2 class="text-2xl font-semibold mb-4">Категории</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <a href="#/category/clothing" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Одежда</h3>
+                    </div>
+                </a>
+                <a href="#/category/electronics" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Техника</h3>
+                    </div>
+                </a>
+                <a href="#/category/kids" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Детям</h3>
+                    </div>
+                </a>
+                <a href="#/category/home" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Дом</h3>
+                    </div>
+                </a>
+                <a href="#/category/beauty" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Красота</h3>
+                    </div>
+                </a>
+                <a href="#/category/sport" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Спорт</h3>
+                    </div>
+                </a>
+                <a href="#/category/auto" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Авто</h3>
+                    </div>
+                </a>
+                <a href="#/category/toys" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Игрушки</h3>
+                    </div>
+                </a>
+                <a href="#/category/stationery" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Канцтовары</h3>
+                    </div>
+                </a>
+                <a href="#/category/health" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Здоровье</h3>
+                    </div>
+                </a>
+                <a href="#/category/jewelry" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Украшения</h3>
+                    </div>
+                </a>
+                <a href="#/category/bags" class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <div class="text-center">
+                        <h3 class="font-medium">Сумки</h3>
+                    </div>
+                </a>
+            </div>
+        </section>
+
+        <!-- Products Grid -->
+        <section id="products" class="mb-8">
+            <h2 class="text-2xl font-semibold mb-4">Популярные товары</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <!-- Products will be dynamically loaded here -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white shadow-md mt-8">
+        <div class="container mx-auto px-4 py-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Контакты</h3>
+                    <p>@nurik1418, +905061528830</p>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">О нас</h3>
+                    <p>TurkiyaMode - ваш надежный магазин турецкой одежды и техники</p>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Мы в соцсетях</h3>
+                    <div class="flex space-x-4">
+                        <span>@nurik1418, +905061528830</span>
+                    </div>
+                </div>
+            </div>
         </div>
-      </footer>
-    </div>
-  );
-}
+    </footer>    <!-- Firebase Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+        import { getStorage } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-storage.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA2EpLzJrcsTt7kK8sF_yzs7XJtl0R7Ybg",
+            authDomain: "mymessenger-d6514.firebaseapp.com",
+            projectId: "mymessenger-d6514",
+            storageBucket: "mymessenger-d6514.appspot.com",
+            messagingSenderId: "677038576951",
+            appId: "1:677038576951:web:4e23891c440def4260b6b2",
+            measurementId: "G-YZ986P5D8K"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+        // Patch for compatibility: add .collection and .doc methods for legacy code
+        db.collection = function (col) {
+            return {
+                orderBy: () => ({
+                    get: async () => {
+                        const q = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
+                        const colRef = q.collection(db, col);
+                        const snap = await q.getDocs(colRef);
+                        return {
+                            empty: snap.empty,
+                            forEach: snap.forEach.bind(snap),
+                        };
+                    }
+                }),
+                where: () => ({
+                    get: async () => {
+                        const q = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
+                        const colRef = q.collection(db, col);
+                        // This is a stub, add logic if needed
+                        const snap = await q.getDocs(colRef);
+                        return {
+                            forEach: snap.forEach.bind(snap),
+                        };
+                    }
+                }),
+                add: async (data) => {
+                    const q = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
+                    const colRef = q.collection(db, col);
+                    return q.addDoc(colRef, data);
+                },
+                doc: (id) => {
+                    return {
+                        get: async () => {
+                            const q = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
+                            const docRef = q.doc(db, col, id);
+                            const docSnap = await q.getDoc(docRef);
+                            return {
+                                exists: docSnap.exists,
+                                id: docSnap.id,
+                                data: () => docSnap.data(),
+                            };
+                        },
+                        delete: async () => {
+                            const q = await import('https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js');
+                            const docRef = q.doc(db, col, id);
+                            return q.deleteDoc(docRef);
+                        }
+                    };
+                }
+            };
+        };
+        // Export Firebase functions globally
+        window.app = { 
+            auth,
+            db, 
+            storage,
+            createUser: (email, password) => createUserWithEmailAndPassword(auth, email, password),
+            signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
+            signOut: () => signOut(auth),
+            updateProfile: (user, data) => updateProfile(user, data)
+        };
+    </script>
+    <script type="module">
+        import './js/products.js';
+        import './js/auth.js';
+        import './js/app.js';
+        import './js/theme.js';
+    </script>
+    <!--
+Новые функции:
+- Адаптивная панель администратора с анимацией и FAB для мобильных
+- Несколько админов могут добавлять товары (allowedAdmins)
+- Анимация карточек товаров и кнопок
+- Быстрое добавление товара с мобильного (FAB)
+- Современный дизайн и плавные переходы
+- Возможность добавлять товары через форму (web/mobile)
+- Все функции работают и на мобильных устройствах
+-->
+</body>
+</html>
